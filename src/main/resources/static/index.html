@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in</title>
+    <style>
+        :root { color-scheme: light; font-family: system-ui, sans-serif; color: #172033; background: #f3f5fa; }
+        * { box-sizing: border-box; }
+        body { min-height: 100vh; display: grid; place-items: center; margin: 0; padding: 24px; }
+        main { width: min(100%, 440px); padding: 32px; border-radius: 16px; background: white; box-shadow: 0 16px 48px #18264a18; }
+        h1 { margin: 0 0 8px; font-size: 1.7rem; }
+        p { color: #64708a; }
+        label { display: block; margin: 18px 0 6px; font-size: .9rem; font-weight: 600; }
+        input { width: 100%; padding: 12px; border: 1px solid #d5dbea; border-radius: 8px; font: inherit; }
+        button { width: 100%; margin-top: 22px; padding: 12px; border: 0; border-radius: 8px; background: #405de6; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+        button:hover { background: #304bc9; }
+        .switch { display: block; margin-top: 16px; text-align: center; color: #405de6; cursor: pointer; }
+        #message { min-height: 24px; margin-bottom: 0; }
+        .error { color: #b42318; }
+        .success { color: #16794b; }
+    </style>
+</head>
+<body>
+<main>
+    <h1 id="heading">Welcome back</h1>
+    <p id="subtitle">Sign in to your account.</p>
+    <form id="auth-form">
+        <div id="registration-fields" hidden>
+            <label for="firstName">First name</label>
+            <input id="firstName" name="firstName" autocomplete="given-name" maxlength="80" disabled>
+            <label for="lastName">Last name</label>
+            <input id="lastName" name="lastName" autocomplete="family-name" maxlength="80" disabled>
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" autocomplete="email" maxlength="254" disabled>
+        </div>
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" required minlength="3" maxlength="50">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required minlength="8">
+        <button id="submit" type="submit">Sign in</button>
+    </form>
+    <a class="switch" id="switch-mode">Create an account</a>
+    <p id="message" role="status" aria-live="polite"></p>
+</main>
+<script>
+    const form = document.querySelector("#auth-form");
+    const message = document.querySelector("#message");
+    const switchMode = document.querySelector("#switch-mode");
+    const registrationFields = document.querySelector("#registration-fields");
+    let registering = false;
+
+    function showMessage(text, isError) {
+        message.textContent = text;
+        message.className = isError ? "error" : "success";
+    }
+
+    function setMode(isRegistering) {
+        registering = isRegistering;
+        document.querySelector("#heading").textContent = registering ? "Create your account" : "Welcome back";
+        document.querySelector("#subtitle").textContent = registering ? "Register to get started." : "Sign in to your account.";
+        document.querySelector("#submit").textContent = registering ? "Create account" : "Sign in";
+        document.querySelector("#password").autocomplete = registering ? "new-password" : "current-password";
+        registrationFields.hidden = !registering;
+        registrationFields.querySelectorAll("input").forEach((input) => {
+            input.disabled = !registering;
+            input.required = registering;
+        });
+        switchMode.textContent = registering ? "Already have an account? Sign in" : "Create an account";
+        showMessage("", false);
+    }
+
+    switchMode.addEventListener("click", () => setMode(!registering));
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const values = Object.fromEntries(new FormData(form));
+        const endpoint = registering ? "/api/auth/register" : "/api/auth/login";
+        try {
+            const response = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(values)
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.message || (registering ? "Unable to create account." : "Unable to sign in."));
+            }
+            if (registering) {
+                setMode(false);
+                showMessage("Account created. You can now sign in.", false);
+            } else {
+                const profileResponse = await fetch("/api/auth/me");
+                const profile = await profileResponse.json();
+                if (!profileResponse.ok) {
+                    throw new Error(profile.message || "Signed in, but could not load your profile.");
+                }
+                showMessage(`Signed in as ${profile.username}.`, false);
+            }
+        } catch (error) {
+            showMessage(error.message, true);
+        }
+    });
+
+    fetch("/api/auth/me")
+        .then(async (response) => {
+            if (response.ok) {
+                const profile = await response.json();
+                showMessage(`You are signed in as ${profile.username}.`, false);
+            } else if (response.status !== 401) {
+                showMessage("Unable to check sign-in status.", true);
+            }
+        })
+        .catch(() => showMessage("Unable to check sign-in status.", true));
+</script>
+</body>
+</html>
